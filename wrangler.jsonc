@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pb-mcp-readonly",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "observability": { "enabled": true },
+
+  // Stores OAuth clients, grants and (encrypted) Productboard tokens.
+  // Create your own with: npx wrangler kv namespace create OAUTH_KV — then paste its id here.
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "a3b11df2e7564418b840b7e27360e964" }],
+
+  "vars": {
+    // Public URL of this Worker, no trailing slash. Shown after the first deploy.
+    "PUBLIC_URL": "https://pb-mcp-readonly.pb-tools.com",
+    // "us" (app.productboard.com) or "eu" (app.eu.productboard.com)
+    "PB_REGION": "us",
+    // Productboard scopes to request. Leave "" to use the scopes configured on the OAuth app.
+    "PB_SCOPES": "entities:read notes:read members:read teams:read"
+  }
+  // Secrets (never in this file): npx wrangler secret put PB_CLIENT_ID / PB_CLIENT_SECRET
+}
