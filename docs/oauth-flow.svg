@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 1080" role="img" aria-labelledby="t d" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="t">How OAuth works for a hosted Productboard app</title>
+  <desc id="d">An admin registers an OAuth app in Productboard and hosts the app with its client ID and secret. Each user then signs in once with their own Productboard credentials and approves the app's scopes; the app exchanges the returned code for an access token and refresh token and stores them encrypted. Every later request uses the user's access token, and when it expires the app uses the stored refresh token to get a new one without involving the user.</desc>
+  <style>
+    :root { --fg: #1f2328; --muted: #59636e; --line: #d0d7de; --bg: #ffffff; --band: #f3f6fb; --accent: #2b5fd9; --lane: #f6f8fa; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --bg: #0d1117; --band: #151b26; --accent: #7ea2ff; --lane: #161b22; }
+    }
+    .bg { fill: var(--bg); }
+    .band { fill: var(--band); }
+    .lanebox { fill: var(--lane); stroke: var(--line); stroke-width: 1.5; }
+    .appbox { fill: var(--lane); stroke: var(--accent); stroke-width: 2; }
+    .lifeline { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 4 5; }
+    .applife { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 5; opacity: .6; }
+    .msg { stroke: var(--fg); stroke-width: 1.6; fill: none; }
+    .ret { stroke: var(--muted); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+    .key { stroke: var(--accent); stroke-width: 2; fill: none; }
+    .head { fill: var(--fg); }
+    .rethead { fill: var(--muted); }
+    .keyhead { fill: var(--accent); }
+    .t { fill: var(--fg); font-size: 12.5px; }
+    .tk { fill: var(--accent); font-size: 12.5px; font-weight: 600; }
+    .tm { fill: var(--muted); font-size: 11.5px; }
+    .h { fill: var(--fg); font-size: 15px; font-weight: 600; }
+    .phase { fill: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+    .title { fill: var(--fg); font-size: 20px; font-weight: 600; }
+    .t, .tk, .tm { paint-order: stroke; stroke: var(--band); stroke-width: 5px; stroke-linejoin: round; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="rethead" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="keyhead" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="920" height="1080"/>
+  <text class="title" x="24" y="36">OAuth for a hosted Productboard app</text>
+  <text class="tm" x="24" y="56">Solid = request · dashed = response · blue = tokens. Lane 3 is the only thing you host; MCP is just one kind of client.</text>
+
+  <!-- Lanes -->
+  <rect class="lanebox" x="20" y="76" width="180" height="52" rx="8"/>
+  <text class="h" x="110" y="98" text-anchor="middle">People</text>
+  <text class="tm" x="110" y="116" text-anchor="middle">admin once, then each user</text>
+  <rect class="lanebox" x="250" y="76" width="160" height="52" rx="8"/>
+  <text class="h" x="330" y="98" text-anchor="middle">Client</text>
+  <text class="tm" x="330" y="116" text-anchor="middle">AI assistant or any app</text>
+  <rect class="appbox" x="455" y="76" width="210" height="52" rx="8"/>
+  <text class="h" x="560" y="98" text-anchor="middle">Your app</text>
+  <text class="tm" x="560" y="116" text-anchor="middle">hosted, e.g. Cloudflare Worker</text>
+  <rect class="lanebox" x="720" y="76" width="160" height="52" rx="8"/>
+  <text class="h" x="800" y="98" text-anchor="middle">Productboard</text>
+  <text class="tm" x="800" y="116" text-anchor="middle">OAuth server + API v2</text>
+
+  <!-- Phase bands -->
+  <rect class="band" x="16" y="142" width="888" height="148" rx="8"/>
+  <rect class="band" x="16" y="302" width="888" height="440" rx="8"/>
+  <rect class="band" x="16" y="754" width="888" height="160" rx="8"/>
+  <rect class="band" x="16" y="926" width="888" height="140" rx="8"/>
+
+  <!-- Lifelines -->
+  <line class="lifeline" x1="110" y1="128" x2="110" y2="1066"/>
+  <line class="lifeline" x1="330" y1="128" x2="330" y2="1066"/>
+  <line class="applife" x1="560" y1="128" x2="560" y2="1066"/>
+  <line class="lifeline" x1="800" y1="128" x2="800" y2="1066"/>
+
+  <!-- 1. Setup -->
+  <text class="phase" x="28" y="162">1 · ONE-TIME SETUP (ADMIN)</text>
+  <line class="msg" x1="110" y1="196" x2="798" y2="196" marker-end="url(#a)"/>
+  <text class="t" x="455" y="189" text-anchor="middle">Register an OAuth app: name, redirect URI (…/callback), read-only scopes</text>
+  <line class="ret" x1="800" y1="230" x2="112" y2="230" marker-end="url(#r)"/>
+  <text class="tk" x="455" y="223" text-anchor="middle">Client ID + client secret</text>
+  <line class="msg" x1="110" y1="266" x2="558" y2="266" marker-end="url(#a)"/>
+  <text class="t" x="335" y="259" text-anchor="middle">Host the app; store client ID + secret as server-side secrets</text>
+
+  <!-- 2. Each user connects once -->
+  <text class="phase" x="28" y="322">2 · EACH USER CONNECTS ONCE</text>
+  <line class="msg" x1="110" y1="352" x2="328" y2="352" marker-end="url(#a)"/>
+  <text class="t" x="220" y="345" text-anchor="middle">Add the app's URL</text>
+  <line class="msg" x1="330" y1="386" x2="558" y2="386" marker-end="url(#a)"/>
+  <text class="t" x="445" y="379" text-anchor="middle">Ask for access (PKCE)</text>
+  <line class="ret" x1="560" y1="420" x2="112" y2="420" marker-end="url(#r)"/>
+  <text class="t" x="335" y="413" text-anchor="middle">Browser: consent page (“allow this client?”)</text>
+  <line class="msg" x1="560" y1="454" x2="798" y2="454" marker-end="url(#a)"/>
+  <text class="t" x="680" y="447" text-anchor="middle">Redirect to sign-in (PKCE)</text>
+  <line class="msg" x1="110" y1="492" x2="798" y2="492" marker-end="url(#a)"/>
+  <text class="t" x="455" y="485" text-anchor="middle">User signs in with their own Productboard login and approves the app's scopes</text>
+  <line class="ret" x1="800" y1="528" x2="562" y2="528" marker-end="url(#r)"/>
+  <text class="t" x="680" y="521" text-anchor="middle">Redirect to /callback + code</text>
+  <line class="msg" x1="560" y1="564" x2="798" y2="564" marker-end="url(#a)"/>
+  <text class="t" x="680" y="557" text-anchor="middle">Code + secret + verifier</text>
+  <line class="key" x1="800" y1="600" x2="562" y2="600" marker-end="url(#k)"/>
+  <text class="tk" x="680" y="593" text-anchor="middle">Access + refresh token</text>
+  <path class="key" d="M560 628 h40 v26 h-38" marker-end="url(#k)"/>
+  <text class="t" x="610" y="641">Store both tokens, encrypted</text>
+  <text class="tm" x="610" y="656">(e.g. Cloudflare KV)</text>
+  <line class="key" x1="560" y1="700" x2="332" y2="700" marker-end="url(#k)"/>
+  <text class="tk" x="445" y="693" text-anchor="middle">App's own token</text>
+  <text class="tm" x="445" y="722" text-anchor="middle">The Productboard token never leaves the app.</text>
+
+  <!-- 3. Every request -->
+  <text class="phase" x="28" y="774">3 · EVERY REQUEST (NO SIGN-IN)</text>
+  <line class="msg" x1="330" y1="806" x2="558" y2="806" marker-end="url(#a)"/>
+  <text class="t" x="445" y="799" text-anchor="middle">Call + app token</text>
+  <line class="msg" x1="560" y1="840" x2="798" y2="840" marker-end="url(#a)"/>
+  <text class="t" x="680" y="833" text-anchor="middle">GET /v2/… + user's token</text>
+  <line class="ret" x1="800" y1="874" x2="562" y2="874" marker-end="url(#r)"/>
+  <text class="t" x="680" y="867" text-anchor="middle">Only what user + scopes allow</text>
+  <line class="ret" x1="560" y1="902" x2="332" y2="902" marker-end="url(#r)"/>
+  <text class="t" x="445" y="895" text-anchor="middle">Result</text>
+
+  <!-- 4. Token refresh -->
+  <text class="phase" x="28" y="946">4 · ACCESS TOKEN EXPIRES (USER NOT INVOLVED)</text>
+  <line class="msg" x1="330" y1="976" x2="558" y2="976" marker-end="url(#a)"/>
+  <text class="t" x="445" y="969" text-anchor="middle">Refresh / next call</text>
+  <line class="key" x1="560" y1="1006" x2="798" y2="1006" marker-end="url(#k)"/>
+  <text class="tk" x="680" y="999" text-anchor="middle">Stored refresh token + secret</text>
+  <line class="key" x1="800" y1="1036" x2="562" y2="1036" marker-end="url(#k)"/>
+  <text class="tk" x="680" y="1029" text-anchor="middle">New access (+ refresh) token</text>
+  <text class="tm" x="44" y="1000">If the user revoked access, the</text>
+  <text class="tm" x="44" y="1016">refresh fails and they repeat step 2.</text>
+  <text class="tm" x="44" y="1046">App stores the new tokens; requests</text>
+  <text class="tm" x="44" y="1062">continue as in step 3.</text>
+</svg>
