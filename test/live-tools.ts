@@ -67,9 +67,9 @@ const cursorOf = (d: Json) => { const n = d?.links?.next; return n ? new URL(n).
 
 const c = await connect(token);
 
-await test('tools/list exposes 13 read-only tools', async () => {
+await test('tools/list exposes 14 read-only tools (writes off)', async () => {
   const { tools } = await c.listTools();
-  assert(tools.length === 13, `expected 13 tools, got ${tools.length}`);
+  assert(tools.length === 14, `expected 14 tools, got ${tools.length}`);
   const notRo = tools.filter((t) => !t.annotations?.readOnlyHint).map((t) => t.name);
   assert(notRo.length === 0, `missing readOnlyHint: ${notRo}`);
   return tools.map((t) => t.name).join(', ');

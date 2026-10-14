@@ -8,7 +8,8 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "bundle": "wrangler deploy --dry-run --minify --outdir dist && mv dist/index.js dist/worker.js && rm -f dist/index.js.map dist/README.md",
-    "test:live": "node test/live-tools.ts"
+    "test:live": "node test/live-tools.ts",
+    "test:live:write": "node test/live-write-tools.ts"
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",

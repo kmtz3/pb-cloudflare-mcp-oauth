@@ -1,5 +1,5 @@
 /**
- * Productboard read-only MCP server on Cloudflare Workers.
+ * Productboard MCP server on Cloudflare Workers. Read-only unless PB_ENABLE_WRITES is "true".
  *
  * Two OAuth legs:
  *   1. MCP client (Claude, Copilot, …)  ⇄  this Worker   — handled by workers-oauth-provider
@@ -28,6 +28,7 @@ interface Env {
   PUBLIC_URL: string;          // e.g. https://pb-mcp-readonly.example.workers.dev (no trailing slash)
   PB_REGION: string;           // "us" | "eu"
   PB_SCOPES: string;           // space-separated Productboard scopes to request ("" = app defaults)
+  PB_ENABLE_WRITES?: string;   // "true" registers the create/update/delete tools (needs write scopes)
   PB_CLIENT_ID: string;        // secret
   PB_CLIENT_SECRET: string;    // secret
   OAUTH_PROVIDER: OAuthHelpers;
@@ -42,6 +43,8 @@ interface Props {
 }
 
 // ── Productboard helpers ──────────────────────────────────────────────────────
+
+const writesOn = (env: Env) => env.PB_ENABLE_WRITES === 'true';
 
 const pbAppBase = (env: Env) =>
   env.PB_REGION === 'eu' ? 'https://app.eu.productboard.com' : 'https://app.productboard.com';
@@ -89,7 +92,7 @@ function ttlFor(props: Props): number {
 /** /mcp — called only after workers-oauth-provider has validated the bearer token. */
 const mcpApiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext & { props: Props }): Promise<Response> {
-    const server = buildMcpServer({ region: env.PB_REGION }, ctx.props.pbAccessToken);
+    const server = buildMcpServer({ region: env.PB_REGION, writes: writesOn(env) }, ctx.props.pbAccessToken);
     // Stateless: a fresh server + transport per request, no Durable Objects needed.
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
@@ -112,15 +115,17 @@ button.primary{background:#0969da;color:#fff;border-color:#0969da}.muted{color:#
 </style></head><body><div class="card">${body}</div></body></html>`;
 }
 
-function consentPage(d: ConsentDescription, handle: string): string {
+function consentPage(d: ConsentDescription, handle: string, writes: boolean): string {
   const origin = d.clientDomain
     ? `Published by <strong>${esc(d.clientDomain)}</strong>.`
     : 'This app registered itself; its name is not verified.';
   return page(`Connect ${d.clientName} to Productboard`, `
-<h1>Allow <strong>${esc(d.clientName)}</strong> to read your Productboard data?</h1>
+<h1>Allow <strong>${esc(d.clientName)}</strong> to ${writes ? 'read and change' : 'read'} your Productboard data?</h1>
 <p>${origin} Access will be sent to <strong>${esc(d.redirectHost)}</strong>.</p>
 ${d.redirectIsLoopback ? '<p class="warn"><strong>This sends access to an app on your computer.</strong> Continue only if you just started connecting from it.</p>' : ''}
-<p class="muted">Read-only: this connector cannot create, change or delete anything. Next you will sign in to Productboard.</p>
+<p class="muted">${writes
+  ? 'This connector can create, change and delete notes, features and other records, with your Productboard permissions.'
+  : 'Read-only: this connector cannot create, change or delete anything.'} Next you will sign in to Productboard.</p>
 <form method="post"><input type="hidden" name="handle" value="${esc(handle)}">
 <p><button class="primary" name="decision" value="approve">Continue to Productboard</button> <button name="decision" value="deny">Cancel</button></p>
 </form>`);
@@ -142,7 +147,7 @@ const defaultHandler = {
         const authReq = await oauth.parseAuthRequest(req);
         const details = await oauth.describeConsent(authReq);
         const consent = await oauth.beginConsent(authReq);
-        return html(consentPage(details, consent.handle), 200, consent.headers);
+        return html(consentPage(details, consent.handle, writesOn(env)), 200, consent.headers);
       }
 
       // Step 2 — user approved; redirect to Productboard with PKCE.
@@ -200,8 +205,9 @@ const defaultHandler = {
       if (url.pathname === '/health') return Response.json({ ok: true });
 
       if (url.pathname === '/') {
-        return html(page('Productboard MCP (read-only)', `
-<h1>Productboard MCP — read-only</h1>
+        const mode = writesOn(env) ? 'read and write' : 'read-only';
+        return html(page(`Productboard MCP (${mode})`, `
+<h1>Productboard MCP — ${mode}</h1>
 <p>Add this URL as a remote MCP server / custom connector in your AI client:</p>
 <p><code>${esc(env.PUBLIC_URL)}/mcp</code></p>
 <p class="muted">You will be asked to sign in to Productboard the first time. Region: ${esc(env.PB_REGION === 'eu' ? 'EU' : 'US')}.</p>`));
@@ -237,7 +243,7 @@ function getProvider(env: Env): OAuthProvider<Env> {
     resourceMetadata: {
       resource: `${env.PUBLIC_URL}/mcp`,
       authorization_servers: [env.PUBLIC_URL],
-      resource_name: 'Productboard (read-only)',
+      resource_name: writesOn(env) ? 'Productboard' : 'Productboard (read-only)',
     },
 
     // Keep the Productboard token fresh whenever the MCP client refreshes its own token.

@@ -16,7 +16,11 @@
     // "us" (app.productboard.com) or "eu" (app.eu.productboard.com)
     "PB_REGION": "us",
     // Productboard scopes to request. Leave "" to use the scopes configured on the OAuth app.
-    "PB_SCOPES": "entities:read notes:read members:read teams:read"
+    "PB_SCOPES": "entities:read notes:read members:read teams:read",
+    // "true" adds the create/update/delete tools (src/write-tools.ts). Also add the write scopes to
+    // PB_SCOPES and to the Productboard OAuth app: entities:write entities:delete notes:write
+    // notes:delete teams:write teams:delete. Users must reconnect to get a token with the new scopes.
+    "PB_ENABLE_WRITES": "false"
   }
   // Secrets (never in this file): npx wrangler secret put PB_CLIENT_ID / PB_CLIENT_SECRET
 }

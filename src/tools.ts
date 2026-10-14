@@ -1,6 +1,6 @@
 /**
- * Read-only Productboard tools. No Cloudflare-specific imports, so the same code runs
- * in the Worker and in the live test script (test/live-tools.ts).
+ * Productboard read tools (plus the opt-in write tools in src/write-tools.ts). No Cloudflare-specific
+ * imports, so the same code runs in the Worker and in the live test script (test/live-tools.ts).
  *
  * Raw v2 list pages are large (100 features ≈ 700 KB, custom fields keyed by UUID), so
  * list tools return compact rows and get tools return fields under their display names.
@@ -9,30 +9,38 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
 import { z } from 'zod';
+import { registerWriteTools } from './write-tools.ts';
 
 export interface PbConfig {
   region: string;              // "us" | "eu"
+  writes?: boolean;            // register the create/update/delete tools (src/write-tools.ts)
 }
 
-type Json = any;
+export type Json = any;
+export type Query = Record<string, string | string[] | undefined>;
 
 export const pbApiBase = (region: string) =>
   region === 'eu' ? 'https://api.eu.productboard.com' : 'https://api.productboard.com';
 
-/** Read-only GET against the Productboard v2 API. */
-async function pbGet(cfg: PbConfig, token: string, path: string, query?: Record<string, string | string[] | undefined>): Promise<Json> {
+/** One call to the Productboard v2 API. Only src/write-tools.ts sends anything other than GET. */
+export async function pbRequest(cfg: PbConfig, token: string, method: string, path: string, query?: Query, body?: Json): Promise<Json> {
   const url = new URL(`${pbApiBase(cfg.region)}/v2${path}`);
   for (const [k, v] of Object.entries(query ?? {})) {
     if (v === undefined || v === '') continue;
     for (const item of Array.isArray(v) ? v : [v]) url.searchParams.append(k, item);
   }
+  const init: RequestInit = {
+    method,
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  };
   // Note: a pageCursor alone drops the filters, so every page re-sends the full query.
-  let res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
-  // Rate limited: wait as told (or 1s, 2s, 4s) and retry up to 3 times.
+  let res = await fetch(url, init);
+  // Rate limited: wait as told (or 1s, 2s, 4s) and retry up to 3 times. A 429 means nothing was applied, so retrying writes is safe.
   for (let attempt = 0; res.status === 429 && attempt < 3; attempt++) {
     const wait = Math.min(Number(res.headers.get('retry-after')) * 1000 || 1000 * 2 ** attempt, 8000);
     await new Promise((r) => setTimeout(r, wait));
-    res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+    res = await fetch(url, init);
   }
   const text = await res.text();
   if (!res.ok) {
@@ -42,8 +50,10 @@ async function pbGet(cfg: PbConfig, token: string, path: string, query?: Record<
       res.status === 429 ? ' (rate limited — retry shortly)' : '';
     throw new Error(`Productboard API ${res.status}${hint}: ${text.slice(0, 500)}`);
   }
-  return JSON.parse(text);
+  return text ? JSON.parse(text) : null;  // DELETE and some PATCH/PUT calls answer 204 with no body
 }
+
+const pbGet = (cfg: PbConfig, token: string, path: string, query?: Query) => pbRequest(cfg, token, 'GET', path, query);
 
 // ── Output shaping ────────────────────────────────────────────────────────────
 
@@ -87,7 +97,7 @@ function normCursor(c?: string): string | undefined {
 }
 
 /** Serialize; if too big, drop list items (never cut mid-JSON) and say so. */
-function result(obj: Json) {
+export function result(obj: Json) {
   let text = JSON.stringify(obj, null, 1);
   if (text.length > MAX_CHARS && Array.isArray(obj.items)) {
     const total = obj.items.length;
@@ -251,7 +261,7 @@ function checkConditions(conds: Condition[]) {
   }
 }
 
-// ── MCP server (read-only tools) ──────────────────────────────────────────────
+// ── MCP server (read tools) ──────────────────────────────────────────────
 
 const cursor = z.string().optional().describe('nextPageCursor from the previous response (omit for the first page)');
 const uuid = z.string().uuid();
@@ -263,7 +273,7 @@ const archivedOk = (b: boolean | undefined, e: Json) => b !== false || e.fields?
 
 export function buildMcpServer(cfg: PbConfig, token: string): McpServer {
   const server = new McpServer(
-    { name: 'productboard-readonly', version: '1.3.0' },
+    { name: cfg.writes ? 'productboard' : 'productboard-readonly', version: '1.4.0' },
     { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
   );
   const get = (path: string, query?: Record<string, string | string[] | undefined>) => pbGet(cfg, token, path, query);
@@ -560,6 +570,17 @@ If complete=false, pass resumeCursor as pageCursor to keep scanning.`,
       .filter((d) => d.markdown);
     return { id: e.id, type: e.type, name: e.fields?.name, url: e.links?.html, documents: docs, empty: docs.length === 0 };
   }));
+
+  server.registerTool('pb_list_field_values', {
+    description: 'List the allowed values of a select/multiselect field: status options, custom select options, or all workspace tags with fieldId="tags". Field ids come from pb_list_entity_configurations.',
+    inputSchema: { fieldId: z.string().min(1).describe('Field id, or "tags" for workspace tags'), pageCursor: cursor },
+    annotations: { readOnlyHint: true },
+  }, run(async (a) => {
+    const d = await get(`/entities/fields/${encodeURIComponent(a.fieldId)}/values`, { pageCursor: normCursor(a.pageCursor) });
+    return page(d, d.data.map((v: Json) => ({ id: v.id, name: v.fields?.name, color: v.fields?.color ?? null })));
+  }));
+
+  if (cfg.writes) registerWriteTools(server, (method, path, body, query) => pbRequest(cfg, token, method, path, query, body));
 
   return server;
 }
